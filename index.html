@@ -3,97 +3,140 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Music Title Case Converter (Server-Side)</title>
+    <title>Advanced Music Converter</title>
     <style>
-        body {
-            font-family: sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #f0f2f5;
-        }
-
-        .container {
-            background-color: white;
-            padding: 2rem;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            text-align: center;
-            max-width: 600px;
-            width: 100%;
-        }
-
-        h1 {
-            margin-bottom: 20px;
-        }
-
-        ul {
-            list-style-type: none;
-            padding: 0;
-            text-align: left;
-        }
-
-        li {
-            background-color: #e9ecef;
-            padding: 10px;
-            margin-bottom: 5px;
-            border-radius: 4px;
-        }
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f0f2f5; }
+        .container { background-color: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); text-align: center; max-width: 600px; width: 100%; }
+        input, button, select { padding: 10px; margin: 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 16px; }
+        button { background-color: #007bff; color: white; cursor: pointer; border: none; }
+        ul { list-style-type: none; padding: 0; text-align: left; }
+        li { background-color: #e9ecef; padding: 10px; margin-bottom: 5px; border-radius: 4px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Music Title Case Converter</h1>
-        <p>Loading song titles from the server...</p>
+        <h1>Music Converter</h1>
+        <div id="form-container">
+            <input type="text" id="usernameInput" placeholder="Enter your username">
+            <input type="text" id="extInput" placeholder="Enter file extension (e.g., mp3)">
+            <select id="caseTypeSelect">
+                <option value="title">Title Case</option>
+                <option value="uppercase">Uppercase</option>
+                <option value="lowercase">Lowercase</option>
+            </select>
+            <button id="processBtn">Process</button>
+        </div>
+        <p id="status"></p>
         <ul id="resultList"></ul>
     </div>
+
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            const usernameInput = document.getElementById('usernameInput');
+            const extInput = document.getElementById('extInput');
+            const caseTypeSelect = document.getElementById('caseTypeSelect');
+            const processBtn = document.getElementById('processBtn');
+            const statusMessage = document.getElementById('status');
             const resultList = document.getElementById('resultList');
 
+            // --- Case Conversion Functions ---
             function toTitleCase(str) {
                 if (!str) return '';
-                const words = str.toLowerCase().split(' ');
-                const titleCaseWords = words.map(word => {
-                    if (word.length > 0) {
-                        return word.charAt(0).toUpperCase() + word.slice(1);
-                    }
-                    return '';
-                });
-                return titleCaseWords.join(' ');
+                return str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
             }
 
-            // Fetch the list of songs from our server-side endpoint
-            fetch('/get-songs')
-                .then(response => {
+            function toUpperCase(str) {
+                return str.toUpperCase();
+            }
+
+            function toLowerCase(str) {
+                return str.toLowerCase();
+            }
+
+            // --- New Function to apply selected case type ---
+            function applyCaseConversion(text, caseType) {
+                switch (caseType) {
+                    case 'uppercase':
+                        return toUpperCase(text);
+                    case 'lowercase':
+                        return toLowerCase(text);
+                    case 'title':
+                    default:
+                        return toTitleCase(text);
+                }
+            }
+
+            // Log an action to the server
+            const logAction = async (action) => {
+                const username = usernameInput.value || 'Anonymous';
+                const logData = { action, username };
+                await fetch('/log', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(logData)
+                });
+            };
+
+            processBtn.addEventListener('click', async () => {
+                const username = usernameInput.value;
+                const fileExt = extInput.value.toLowerCase().trim();
+                const caseType = caseTypeSelect.value;
+                resultList.innerHTML = '';
+                statusMessage.textContent = '';
+
+                if (!username) {
+                    statusMessage.textContent = 'Please enter a username.';
+                    return;
+                }
+                await logAction(`User '${username}' started the process.`);
+
+                if (fileExt !== 'mp3') {
+                    statusMessage.textContent = `Coming soon: support for .${fileExt} files.`;
+                    await logAction(`User requested .${fileExt}, which is not supported.`);
+                    return;
+                }
+                
+                statusMessage.textContent = 'Fetching songs...';
+                try {
+                    const response = await fetch(`/get-songs?caseType=${caseType}`);
                     if (!response.ok) {
                         throw new Error('Network response was not ok');
                     }
-                    return response.json();
-                })
-                .then(data => {
-                    if (data.files && data.files.length > 0) {
-                        data.files.forEach(filename => {
-                            // Extract filename without extension
-                            const lastDotIndex = filename.lastIndexOf('.');
-                            const filenameWithoutExtension = lastDotIndex === -1 ? filename : filename.substring(0, lastDotIndex);
+                    const data = await response.json();
+                    
+                    if (data.files.length > 0) {
+                        statusMessage.textContent = `Processing ${data.files.length} song(s) for user '${username}'...`;
+                        await logAction(`Processing ${data.files.length} song(s) with ${caseType} for user '${username}'.`);
 
-                            const convertedTitle = toTitleCase(filenameWithoutExtension);
+                        data.files.forEach(filename => {
+                            const lastDotIndex = filename.lastIndexOf('.');
+                            const filenameWithoutExt = lastDotIndex === -1 ? filename : filename.substring(0, lastDotIndex);
+                            
+                            const parts = filenameWithoutExt.split(' - ');
+                            const artist = parts.length > 1 ? parts[0] : 'Unknown Artist';
+                            const title = parts.length > 1 ? parts[1] : filenameWithoutExt;
+
+                            // Apply the conversion to both artist and title
+                            const convertedArtist = applyCaseConversion(artist, caseType);
+                            const convertedTitle = applyCaseConversion(title, caseType);
+
                             const listItem = document.createElement('li');
-                            listItem.textContent = `Original: "${filenameWithoutExtension}" -> Converted: "${convertedTitle}"`;
+                            listItem.textContent = `Artist: ${convertedArtist}, Title: ${convertedTitle}`;
                             resultList.appendChild(listItem);
                         });
-                        document.querySelector('p').textContent = 'Successfully loaded and converted song titles:';
+                        statusMessage.textContent = 'Conversion complete!';
+                        await logAction(`Conversion completed successfully.`);
+
                     } else {
-                        document.querySelector('p').textContent = 'No music files found in the server directory.';
+                        statusMessage.textContent = 'No .mp3 files found in the directory.';
+                        await logAction('No .mp3 files were found.');
                     }
-                })
-                .catch(error => {
-                    console.error('Error fetching songs:', error);
-                    document.querySelector('p').textContent = 'Failed to load songs. Please check the server.';
-                });
+                } catch (error) {
+                    console.error('Error:', error);
+                    statusMessage.textContent = 'Failed to load songs. Please check the server.';
+                    await logAction(`Error: Failed to fetch songs. ${error.message}`);
+                }
+            });
         });
     </script>
 </body>
